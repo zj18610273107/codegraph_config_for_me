@@ -1,0 +1,20 @@
+{
+  "include": [
+    "target/",
+    "scripts/target/"
+  ],
+  "exclude": [
+    "build/",
+    "**/build/",
+    "generated/",
+    "**/generated/",
+    "ci-generated/",
+    "extlibs/install/",
+    ".dlcache/",
+    ".cache/",
+    ".config/",
+    "__pycache__/",
+    "**/__pycache__/",
+    "*.pyc"
+  ]
+}
