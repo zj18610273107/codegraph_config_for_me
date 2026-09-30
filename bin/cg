@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_dir() {
+  local source="${BASH_SOURCE[0]}"
+  local dir
+
+  while [ -L "$source" ]; do
+    dir="$(cd -P "$(dirname "$source")" && pwd)"
+    source="$(readlink "$source")"
+    if [[ "$source" != /* ]]; then
+      source="$dir/$source"
+    fi
+  done
+
+  cd -P "$(dirname "$source")" && pwd
+}
+
+NAME="$(basename "$0")"
+SCRIPT_DIR="$(resolve_script_dir)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEFAULT_CODEGRAPH_BIN="$(cd "$REPO_ROOT/.." && pwd)/codegraph/dist/bin/codegraph.js"
+
+if [ -n "${CG_CODEGRAPH_BIN:-}" ]; then
+  CODEGRAPH_BIN="$CG_CODEGRAPH_BIN"
+elif [ -x "$DEFAULT_CODEGRAPH_BIN" ]; then
+  CODEGRAPH_BIN="$DEFAULT_CODEGRAPH_BIN"
+else
+  CODEGRAPH_BIN="codegraph"
+fi
+
+CODEGRAPH_INDEX_DIR="${CG_CODEGRAPH_DIR:-build}"
+CODEGRAPH_CONFIG_DIR="${CG_CODEGRAPH_CONFIG_DIR:-build}"
+CODEGRAPH_CONFIG_ROOT="${CG_CONFIG_ROOT:-$REPO_ROOT}"
+
+if [ "$NAME" = "cg-init" ] && [ $# -gt 0 ] && [ -d "$1" ]; then
+  PROJECT_ROOT="$(cd "$1" && pwd)"
+  shift
+else
+  PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+fi
+
+cd "$PROJECT_ROOT"
+
+run_codegraph() {
+  CODEGRAPH_DIR="$CODEGRAPH_INDEX_DIR" exec "$CODEGRAPH_BIN" "$@"
+}
+
+case "$NAME" in
+  cg-init)
+    REPO_NAME="$(basename "$PROJECT_ROOT")"
+    CONFIG_DIR="$CODEGRAPH_CONFIG_ROOT/$REPO_NAME"
+
+    if [ -d "$CONFIG_DIR" ]; then
+      copied=0
+      TARGET_DIR="$PROJECT_ROOT/$CODEGRAPH_CONFIG_DIR"
+      mkdir -p "$TARGET_DIR"
+      for file in .gitignore codegraph.json; do
+        if [ -f "$CONFIG_DIR/$file" ]; then
+          cp -f "$CONFIG_DIR/$file" "$TARGET_DIR/$file"
+          copied=1
+        fi
+      done
+
+      if [ "$copied" -eq 1 ]; then
+        echo "Copied CodeGraph config for '$REPO_NAME' to $TARGET_DIR"
+      else
+        echo "No CodeGraph config files for '$REPO_NAME'; using default settings"
+      fi
+    else
+      echo "No CodeGraph config for repo '$REPO_NAME'; using default settings"
+    fi
+
+    if [ -f "$PROJECT_ROOT/$CODEGRAPH_INDEX_DIR/codegraph.db" ]; then
+      echo "Existing CodeGraph index found; rebuilding it"
+      run_codegraph index "$@"
+    else
+      echo "No CodeGraph index found; initializing"
+      run_codegraph init "$@"
+    fi
+    ;;
+  cg-status)
+    run_codegraph status "$@"
+    ;;
+  cg-list|cg-files)
+    run_codegraph files "$@"
+    ;;
+  cg-explore)
+    run_codegraph explore "$@"
+    ;;
+  cg-callers)
+    run_codegraph callers "$@"
+    ;;
+  cg-callees)
+    run_codegraph callees "$@"
+    ;;
+  cg-impact)
+    run_codegraph impact "$@"
+    ;;
+  cg-query)
+    run_codegraph query "$@"
+    ;;
+  cg-node)
+    run_codegraph node "$@"
+    ;;
+  cg-sync)
+    run_codegraph sync "$@"
+    ;;
+  cg-version)
+    run_codegraph version "$@"
+    ;;
+  *)
+    run_codegraph "$@"
+    ;;
+esac
